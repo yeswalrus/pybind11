@@ -72,6 +72,14 @@ def test_override(capture, msg):
     assert cstats.copy_constructions == 0
     assert cstats.move_constructions >= 0
 
+def test_virtual_factory():
+    class DerivedFactory(m.VirtualFactory):
+        def generate(self):
+            return DerivedFactory()
+
+    dv = DerivedFactory()
+    client = m.VirtualFactoryClient()
+    client.triggerGenerations(3, dv)
 
 def test_alias_delay_initialization1(capture):
     """`A` only initializes its trampoline class when we inherit from it

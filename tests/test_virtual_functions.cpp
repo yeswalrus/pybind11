@@ -10,6 +10,7 @@
 #include "pybind11_tests.h"
 #include "constructor_stats.h"
 #include <pybind11/functional.h>
+#include <pybind11/stl.h>
 #include <thread>
 
 /* This is an example class that we'll want to be able to extend from Python */
@@ -159,6 +160,33 @@ struct DispatchIssue : Base {
     }
 };
 
+
+/// A method with a virtual factory & shared_ptr holder class
+struct VirtualFactory {
+    virtual ~VirtualFactory() {}
+    virtual std::shared_ptr<VirtualFactory> generate() = 0;
+};
+
+struct VirtualFactoryTrampoline : VirtualFactory {
+    virtual std::shared_ptr<VirtualFactory> generate() {
+        PYBIND11_OVERLOAD_PURE(
+            std::shared_ptr<VirtualFactory>,
+            VirtualFactory,
+	    generate, /*no arguments*/);
+    }
+};
+
+struct VirtualFactoryClient {
+    void triggerGenerations(size_t maxIterations, std::shared_ptr<VirtualFactory> initial ) {
+	std::vector<std::shared_ptr<VirtualFactory>> items { initial };
+	for(size_t i = 0; (i < maxIterations) && (i < items.size()); ++i) {
+	    auto next = items[i]->generate();
+                items.push_back(next);
+	}
+    }
+
+};
+
 static void test_gil() {
     {
         py::gil_scoped_acquire lock;
@@ -216,6 +244,15 @@ TEST_SUBMODULE(virtual_functions, m) {
 
     m.def("cstats_debug", &ConstructorStats::get<ExampleVirt>);
     initialize_inherited_virtuals(m);
+
+
+    py::class_<VirtualFactory, VirtualFactoryTrampoline, std::shared_ptr<VirtualFactory>>(m, "VirtualFactory")
+	    .def(py::init_alias<>())
+	    .def("generate", &VirtualFactory::generate);
+
+    py::class_<VirtualFactoryClient>(m, "VirtualFactoryClient")
+	    .def(py::init<>())
+	    .def("triggerGenerations", &VirtualFactoryClient::triggerGenerations);
 
     // test_alias_delay_initialization1
     // don't invoke Python dispatch classes by default when instantiating C++ classes
